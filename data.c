@@ -468,8 +468,11 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 
 	bio_set_op_attrs(bio, fio->op, fio->op_flags);
 
-	if (!is_read_io(fio->op))
+	if (!is_read_io(fio->op)) {
 		inc_page_count(fio->sbi, WB_DATA_TYPE(fio->page));
+		fio->sbi->write_for_trim ++;
+	}
+		
 
 	__submit_bio(fio->sbi, bio, fio->type);
 	return 0;
@@ -508,6 +511,7 @@ next:
 	fio->submitted = true;
 
 	inc_page_count(sbi, WB_DATA_TYPE(bio_page));
+	sbi->write_for_trim ++;
 
 	if (io->bio && (io->last_block_in_bio != fio->new_blkaddr - 1 ||
 	    (io->fio.op != fio->op || io->fio.op_flags != fio->op_flags) ||

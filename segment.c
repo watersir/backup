@@ -1375,6 +1375,7 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 	int i, issued = 0;
 	bool io_interrupted = false;
 
+	printk("w:%d\n",sbi->write_for_trim);
 	printk("1:%d\n",sbi->discard_blks);
 	printk("2:%d\n",dcc->nr_discards);
 	printk("3:%d\n",dcc->undiscard_blks);
@@ -1419,6 +1420,8 @@ next:
 			break;
 	}
 
+	if (!issued && (!io_interrupted))
+		sbi->write_for_trim = 0;
 	if (!issued && io_interrupted)
 		issued = -1;
 
