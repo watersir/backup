@@ -443,6 +443,7 @@ void f2fs_flush_merged_writes(struct f2fs_sb_info *sbi)
  */
 int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 {
+	struct f2fs_sb_info *sbi = fio->sbi;
 	struct bio *bio;
 	struct page *page = fio->encrypted_page ?
 			fio->encrypted_page : fio->page;
@@ -471,7 +472,7 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 		inc_page_count(fio->sbi, WB_DATA_TYPE(fio->page));
 	if (!is_read_io(fio->op)) {
 		inc_page_count(fio->sbi, WB_DATA_TYPE(fio->page));
-		fio->sbi->write_for_trim ++ ;
+		sbi->write_for_trim ++ ;
 	}
 
 	__submit_bio(fio->sbi, bio, fio->type);
