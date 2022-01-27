@@ -1486,10 +1486,6 @@ int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	err = block_operations(sbi);
 	if (err)
 		goto out;
-        struct block_device * bdev = sbi->sb->s_bdev;
-        struct request_queue * q = bdev_get_queue(bdev);
-        struct request_list *rl = &q->root_rl;
-        printk("valid : %d",rl->count[BLK_RW_SYNC]+rl->count[BLK_RW_ASYNC]);
 
 
 	trace_f2fs_write_checkpoint(sbi->sb, cpc->reason, "finish block_ops");

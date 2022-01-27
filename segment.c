@@ -1540,7 +1540,7 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 		// long long int k = 3160132*10000;
 		// long long int up = k * i * (sbi->user_block_count - sbi->total_valid_block_count) / sbi->user_block_count;
 		// long long int ssd_invalid = remapSendor(0,0);
-//		printk("1\n");
+		printk("1\n");
 		list_for_each_entry_safe(dc, tmp, pend_list, list) {
 			f2fs_bug_on(sbi, dc->state != D_PREP);
 
@@ -1565,7 +1565,7 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 			if (dpolicy->io_aware && i < dpolicy->io_aware_gran &&
 								!is_idle(sbi)) {
 				io_interrupted = true;
-//				printk("0\n");
+				printk("0\n");
 				break;
 			}
 
