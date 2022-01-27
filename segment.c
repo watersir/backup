@@ -989,7 +989,7 @@ static void __init_discard_policy(struct f2fs_sb_info *sbi,
 	dpolicy->ordered = false;
 	dpolicy->granularity = granularity;
 
-	dpolicy->max_requests = DEF_MAX_DISCARD_REQUEST;
+	dpolicy->max_requests = 8;//80000000;//DEF_MAX_DISCARD_REQUEST;
 	dpolicy->io_aware_gran = MAX_PLIST_NUM;
 
 	if (discard_type == DPOLICY_BG) {
@@ -1014,6 +1014,144 @@ static void __init_discard_policy(struct f2fs_sb_info *sbi,
 		dpolicy->max_requests = UINT_MAX;
 		dpolicy->io_aware = false;
 	}
+}
+int rf_getIO(struct f2fs_sb_info *sbi) {
+	struct block_device *bdev = sbi->sb->s_bdev;
+	struct request_queue *q = bdev_get_queue(bdev);
+	struct request_list *rl = &q->root_rl;
+	int sync_io = rl->count[BLK_RW_SYNC];
+	int async_io = rl->count[BLK_RW_ASYNC];
+//	printk("sync_io:%d",sync_io);
+//	printk("async_io:%d",async_io);
+	int congest = BIO_congestion(sbi);
+	int ret = 0;
+	if(sync_io>congest) 
+		ret = 2;
+	if(async_io>congest)
+		ret += 1;
+	return ret;
+}
+inline int rand_j(void) {
+	int j = jiffies;
+//	printk("j:%d",j);
+	int X = jiffies%4096;
+//	printk("X:%d",X);
+//	printk("%d",EPSILON);
+    return X;
+}
+void get_random_bytes(void *buf, int nbytes);
+int selecta(int s,long int * q) {
+    int action = -1;
+	unsigned long j;
+	get_random_bytes(&j, sizeof(unsigned long));
+	printk("j:%ld",j);
+	unsigned int cp = j%8;
+	if(cp < 2){
+		get_random_bytes(&j, sizeof(unsigned long));
+	        action = j%SUM_ACTION;
+		printk("ra:%d",j);
+	} else {
+		long int q_max = LONG_MIN;
+		int i;
+		for(i = 0; i < SUM_ACTION; i++) {
+			int idx = s*SUM_ACTION + i;
+			if(q[idx]>q_max) {
+				q_max = q[idx];
+				action = i;
+			}
+		}
+	}
+    return action;
+}
+static int rf_getSSDinvalid(void) {
+	unsigned int invalid_free = remapSendor(1,0);
+	if(invalid_free!=-1)
+		return invalid_free;
+	else 
+		return 0;
+}
+static int rf_getSSDMIG(void) {
+	unsigned int ssdgc_mig = remapSendor(0,0);
+	if(ssdgc_mig!=-1)
+		return ssdgc_mig;
+	else 
+		return 0;
+}
+
+static void updateq(int s, int slast, long int * q, int a,
+				struct f2fs_sb_info *sbi,struct discard_cmd_control * dcc) {
+    int mig = rf_getSSDMIG();
+    int io = blocked_size(sbi);
+	printk("mig:%d\n",mig); 
+//	printk("io:%d\n",io); 
+	int io_before = dcc->rf.io;
+//	printk("io_before:%d\n",io_before); 
+	dcc->rf.io = io;
+	int reward_my;
+	if(mig<10000)
+		mig = 10000;
+	reward_my = 10000000/(mig+1);//+(io_before-io); // This value is too big!
+	long int best_q = LONG_MIN;    
+	int i;
+	for(i = 0; i < SUM_ACTION;i++)
+		if(q[s*SUM_ACTION+i]>best_q)
+			best_q = q[s*SUM_ACTION+i];
+	printk("reward_my:%d\n",reward_my);
+//	printk("best_q:%d\n",best_q);
+//	printk("slast:%d\n",slast);
+	printk("alast:%d\n",a);
+//	printk("q[slast*SUM_ACTION+a]:%d\n",q[slast*SUM_ACTION+a]);  	
+//	q[slast*SUM_ACTION+a] = q[slast*SUM_ACTION+a] + (reward_my + best_q/10 - q[slast*SUM_ACTION+a] )/10;
+	if(dcc->rf.mig[slast*SUM_ACTION+a]==5)
+		dcc->rf.mig[slast*SUM_ACTION+a] = 0;
+	printk("dcc->rf.mig[slast*SUM_ACTION+a]:%d\n",dcc->rf.mig[slast*SUM_ACTION+a]);
+	q[slast*SUM_ACTION+a] = reward_my;//(q[slast*SUM_ACTION+a]*dcc->rf.mig[slast*SUM_ACTION+a]+reward_my)/(dcc->rf.mig[slast*SUM_ACTION+a]+1);
+
+	printk("q[slast*SUM_ACTION+a]:%d\n",q[slast*SUM_ACTION+a]);
+	dcc->rf.mig[slast*SUM_ACTION+a]++;
+}
+//void printQ(struct discard_cmd_control * dcc) {
+//	int i,j;
+//    for (i=0; i<STATE_TYPE; ++i) {   
+//        for (j=0; j<SUM_ACTION;++j) {
+//            printk("%f ", dcc->rf.q[i*SUM_ACTION+j]);
+//        }
+//        printk(";");
+//        if (i % 8 == 7)
+//            printk("\n");
+ //   }
+//}
+static void reinforcementLearningStudy(struct f2fs_sb_info *sbi,
+				struct discard_policy *dpolicy, int discard_type,struct discard_cmd_control * dcc) {
+	int s_io = 0;//rf_getIO(sbi);
+	int s_ssd = 0;//rf_getSSDinvalid();
+	int s = s_io*SSD_INVALID_TYPE+s_ssd;
+	printk("s_io:%d\n",s_io);
+//	printk("s_ssd:%d\n",s_ssd);
+//       printk("s:%d\n",s);
+    int a = selecta(s,dcc->rf.q);
+	int granularity_no = a / DISCARD_NUM;
+	int discard_num_no = a%DISCARD_NUM;
+	if(granularity_no==0)
+		dpolicy->granularity = MIN_DISCARD_0;
+	else 
+		dpolicy->granularity = MIN_DISCARD_1;
+	if(discard_num_no==0)
+		dpolicy->max_requests = DISCARD_NUM_0;
+	else if(discard_num_no==1)
+		dpolicy->max_requests = DISCARD_NUM_1;
+	else if(discard_num_no==2)
+		dpolicy->max_requests = DISCARD_NUM_2;
+	else
+		dpolicy->max_requests = DISCARD_NUM_3;
+        printk("a:%d\n",a);
+
+	// update state.
+    dcc->rf.slast = dcc->rf.s;
+    dcc->rf.s = s;
+	// learn q.
+    updateq(dcc->rf.s,dcc->rf.slast,dcc->rf.q,dcc->rf.a,sbi,dcc);
+    dcc->rf.a = a;
 }
 
 static void __update_discard_tree_range(struct f2fs_sb_info *sbi,
@@ -1364,7 +1502,6 @@ next:
 
 	return issued;
 }
-
 static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 					struct discard_policy *dpolicy)
 {
@@ -1374,6 +1511,13 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 	struct blk_plug plug;
 	int i, issued = 0;
 	bool io_interrupted = false;
+
+	printk("w:%ld\n",sbi->write_for_trim);	
+	printk("1:%d\n",sbi->discard_blks);
+	printk("2:%d\n",dcc->nr_discards);
+	printk("3:%d\n",dcc->undiscard_blks);
+	printk("4:%d\n",atomic_read(&dcc->issing_discard));
+	printk("5:%d\n",atomic_read(&dcc->discard_cmd_cnt));
 
 	for (i = MAX_PLIST_NUM - 1; i >= 0; i--) {
 		if (i + 1 < dpolicy->granularity)
@@ -1391,12 +1535,38 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 			f2fs_bug_on(sbi, !f2fs_check_rb_tree_consistence(sbi,
 								&dcc->root));
 		blk_start_plug(&plug);
+	
+
+		long long int k = 3160132*10000;
+		long long int up = k * i * (sbi->user_block_count - sbi->total_valid_block_count) / sbi->user_block_count;
+		long long int ssd_invalid = remapSendor(0,0);
+//		printk("1\n");
 		list_for_each_entry_safe(dc, tmp, pend_list, list) {
 			f2fs_bug_on(sbi, dc->state != D_PREP);
 
+	//		int k = 100;
+	//		int up = i * sbi->total_valid_block_count / sbi->user_block_count;
+	//		long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
+	//		long long int ssd_invalid = remapSendor(0,0);
+	//		int down = ssd_invalid * dele;
+	//		printk("up:%d\n",up);
+	//		printk("dele:%ld\n",dele);
+	//		printk("ssd_invalid:%ld\n",ssd_invalid);
+
+			f2fs_bug_on(sbi, dc->state != D_PREP);
+			long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
+			int down = ssd_invalid * dele;
+
+//			if(1)//up > down)
+//				__submit_discard_cmd(sbi, dpolicy, dc, &issued);
+//			else{
+//				io_interrupted = true;
+//				break;
+//			}
 			if (dpolicy->io_aware && i < dpolicy->io_aware_gran &&
 								!is_idle(sbi)) {
 				io_interrupted = true;
+//				printk("0\n");
 				break;
 			}
 
@@ -1411,6 +1581,11 @@ next:
 
 		if (issued >= dpolicy->max_requests || io_interrupted)
 			break;
+	}
+
+	if(!issued && !io_interrupted) {
+		sbi->write_for_trim = 0;
+		printk("w reset!\n");
 	}
 
 	if (!issued && io_interrupted)
@@ -1579,7 +1754,7 @@ bool f2fs_wait_discard_bios(struct f2fs_sb_info *sbi)
 	f2fs_bug_on(sbi, atomic_read(&dcc->discard_cmd_cnt));
 	return dropped;
 }
-
+int flag = 0;
 static int issue_discard_thread(void *data)
 {
 	struct f2fs_sb_info *sbi = data;
@@ -1616,17 +1791,45 @@ static int issue_discard_thread(void *data)
 
 		if (sbi->gc_mode == GC_URGENT)
 			__init_discard_policy(sbi, &dpolicy, DPOLICY_FORCE, 1);
-
+/*		if(!(flag%1000)){
+			reinforcementLearningStudy(sbi, &dpolicy, DPOLICY_FORCE,dcc);
+		} else {
+		
+			int a = dcc->rf.a;
+			int granularity_no = a / DISCARD_NUM;
+			int discard_num_no = a % DISCARD_NUM;
+			if(granularity_no==0)
+				dpolicy.granularity = MIN_DISCARD_0;
+			else 
+				dpolicy.granularity = MIN_DISCARD_1;
+			if(discard_num_no==0)
+				dpolicy.max_requests = DISCARD_NUM_0;
+			else if(discard_num_no==1)
+				dpolicy.max_requests = DISCARD_NUM_1;
+			else if(discard_num_no==2)
+				dpolicy.max_requests = DISCARD_NUM_2;
+			else
+				dpolicy.max_requests = DISCARD_NUM_3;
+		}
+		flag++;*/
 		sb_start_intwrite(sbi->sb);
 
+	        struct block_device * bdev = sbi->sb->s_bdev;
+	       	struct request_queue * q = bdev_get_queue(bdev);
+	        struct request_list *rl = &q->root_rl;
+//	        if(rl->count[BLK_RW_SYNC]+rl->count[BLK_RW_ASYNC] > 0)
+//			printk("***valid***: %d",rl->count[BLK_RW_SYNC]+rl->count[BLK_RW_ASYNC]);
+//		long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
+//		if(dele > 0)
+//			printk("***wb_bios***: %ld",dele);
 		issued = __issue_discard_cmd(sbi, &dpolicy);
 		if (issued > 0) {
 			__wait_all_discard_cmd(sbi, &dpolicy);
 			wait_ms = dpolicy.min_interval;
 		} else if (issued == -1){
-			wait_ms = dpolicy.mid_interval;
+			wait_ms = dpolicy.min_interval;
 		} else {
-			wait_ms = dpolicy.max_interval;
+			wait_ms = dpolicy.mid_interval;
 		}
 
 		sb_end_intwrite(sbi->sb);
@@ -1954,6 +2157,24 @@ static int create_discard_cmd_control(struct f2fs_sb_info *sbi)
 	dcc->next_pos = 0;
 	dcc->root = RB_ROOT;
 	dcc->rbtree_check = false;
+	dcc->rf.s = 0;
+	dcc->rf.slast = 0;
+	dcc->rf.io = 0;
+	dcc->rf.a = 0;
+	dcc->rf.q = f2fs_kzalloc(sbi,sizeof(long int)*STATE_TYPE*SUM_ACTION, GFP_KERNEL); 
+	dcc->rf.mig = f2fs_kzalloc(sbi,sizeof(long int)*STATE_TYPE*SUM_ACTION, GFP_KERNEL);
+	if (!dcc->rf.q)
+		return -ENOMEM;
+	for(i = 0; i < STATE_TYPE; i++){ // Initial q.
+		dcc->rf.q[i*SUM_ACTION+0] = rand_j();
+		dcc->rf.q[i*SUM_ACTION+1] = dcc->rf.q[i*SUM_ACTION+1] + 256; // better to set larger discard.
+		dcc->rf.q[i*SUM_ACTION+2] = dcc->rf.q[i*SUM_ACTION+2] + 256*2; // better to set larger discard.
+		dcc->rf.q[i*SUM_ACTION+3] = dcc->rf.q[i*SUM_ACTION+3] + 256*3; // better to set larger discard.
+		dcc->rf.q[i*SUM_ACTION+4] = dcc->rf.q[i*SUM_ACTION+0];
+		dcc->rf.q[i*SUM_ACTION+5] = dcc->rf.q[i*SUM_ACTION+1]; // better to set larger discard.
+		dcc->rf.q[i*SUM_ACTION+6] = dcc->rf.q[i*SUM_ACTION+2]; // better to set larger discard.
+		dcc->rf.q[i*SUM_ACTION+7] = dcc->rf.q[i*SUM_ACTION+3]; // better to set larger discard.
+        }
 
 	init_waitqueue_head(&dcc->discard_wait_queue);
 	SM_I(sbi)->dcc_info = dcc;
@@ -3018,73 +3239,6 @@ reallocate:
 	if (keep_order)
 		up_read(&fio->sbi->io_order_lock);
 }
-
-struct nvme_passthru_cmd {
-	__u8	opcode;
-	__u8	flags;
-	__u16	rsvd1;
-	__u32	nsid;
-	__u32	cdw2;
-	__u32	cdw3;
-	__u64	metadata;
-	__u64	addr;
-	__u32	metadata_len;
-	__u32	data_len;
-	__u32	cdw10;
-	__u32	cdw11;
-	__u32	cdw12;
-	__u32	cdw13;
-	__u32	cdw14;
-	__u32	cdw15;
-	__u32	timeout_ms;
-	__u32	result;
-};
-extern int nvme_kernel_iocmd(struct block_device *dev, struct nvme_passthru_cmd *ucmd);
-#define REMAP 0x93
-int remapSSD(unsigned int ori_lba,unsigned int new_lba,int len) {
-	
-	struct file *filp = NULL;
-    mm_segment_t oldfs;
-    int err = 0;
-
-    oldfs = get_fs();
-    set_fs(get_ds());
-    filp = filp_open("/dev/nvme0n1", O_RDONLY, 0);
-    set_fs(oldfs);
-    if (IS_ERR(filp)) {
-        err = PTR_ERR(filp);
-		printk("Unable to open stats file to write\n");
-        return -1;
-    }
-
-	struct block_device *b_dev = filp->f_inode->i_bdev;
-	u32 result;
-	int err2;
-	int count = 20;
-	int opcode;
-	struct nvme_passthru_cmd cmd;
-
-	cmd.opcode = REMAP;
-	cmd.nsid = 1;
-	cmd.cdw10 = ori_lba;
-	cmd.cdw11 = new_lba;
-	cmd.cdw12 = len;
-
-	err2 = nvme_kernel_iocmd(b_dev,&cmd);
-
-    filp_close(filp, NULL);
-	result = cmd.result;
-	printk("err2:%d\n",err2);
-	printk("result:%d\n",result);
-	int ret = min(result & 0xffff,result >> 16) + 1;
-	if(ret>=0){
-		printk("remap success!\n");	
-		return 0;
-	} else {
-		printk("remap failed!\n"); 
-		return -1;
-	}
-}
 static void do_remap_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 {
 	int type = __get_segment_type(fio);
@@ -3100,10 +3254,16 @@ reallocate:
 					fio->old_blkaddr, fio->old_blkaddr);
 
 	/* writeout dirty page into bdev */
-	printk("remap:\n");
+//	f2fs_submit_page_write(fio);
 	remapSSD(fio->old_blkaddr,fio->new_blkaddr,1);
 
-	update_device_state(fio);
+	if (fio->retry) {
+		fio->old_blkaddr = fio->new_blkaddr;
+		goto reallocate;
+	}
+
+//	update_device_state(fio);
+
 	if (keep_order)
 		up_read(&fio->sbi->io_order_lock);
 }
@@ -3167,7 +3327,7 @@ void f2fs_outplace_remap_data(struct dnode_of_data *dn,
 	do_remap_page(&sum, fio);
 	f2fs_update_data_blkaddr(dn, fio->new_blkaddr);
 
-	f2fs_update_iostat(sbi, fio->io_type, F2FS_BLKSIZE);
+//	f2fs_update_iostat(sbi, fio->io_type, F2FS_BLKSIZE);
 }
 int f2fs_inplace_write_data(struct f2fs_io_info *fio)
 {

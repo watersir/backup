@@ -468,8 +468,11 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 
 	bio_set_op_attrs(bio, fio->op, fio->op_flags);
 
-	if (!is_read_io(fio->op))
 		inc_page_count(fio->sbi, WB_DATA_TYPE(fio->page));
+	if (!is_read_io(fio->op)) {
+		inc_page_count(fio->sbi, WB_DATA_TYPE(fio->page));
+		fio->sbi->write_for_trim ++ ;
+	}
 
 	__submit_bio(fio->sbi, bio, fio->type);
 	return 0;
@@ -508,6 +511,7 @@ next:
 	fio->submitted = true;
 
 	inc_page_count(sbi, WB_DATA_TYPE(bio_page));
+	sbi->write_for_trim ++ ;
 
 	if (io->bio && (io->last_block_in_bio != fio->new_blkaddr - 1 ||
 	    (io->fio.op != fio->op || io->fio.op_flags != fio->op_flags) ||
@@ -770,58 +774,7 @@ put_err:
 	f2fs_put_page(page, 1);
 	return ERR_PTR(err);
 }
-struct page *f2fs_get_cached_data_page(struct inode *inode, pgoff_t index,bool for_write)
-{
-	struct address_space *mapping = inode->i_mapping;
-	struct dnode_of_data dn;
-	struct page *page;
-	struct extent_info ei = {0,0,0};
-	int err;
 
-	page = f2fs_grab_cache_page(mapping, index, for_write);
-	if (!page)
-		return ERR_PTR(-ENOMEM);
-
-	if (f2fs_lookup_extent_cache(inode, index, &ei)) { // find wheather in extent tree.
-		dn.data_blkaddr = ei.blk + index - ei.fofs;
-		goto got_it;
-	}
-
-	set_new_dnode(&dn, inode, NULL, NULL, 0);
-	err = f2fs_get_dnode_of_data(&dn, index, LOOKUP_NODE);
-	if (err)
-		goto put_err;
-	f2fs_put_dnode(&dn);
-
-	if (unlikely(dn.data_blkaddr == NULL_ADDR)) {
-		err = -ENOENT;
-		goto put_err;
-	}
-got_it:
-	if (PageUptodate(page)) {
-		unlock_page(page);
-		return page;
-	}
-
-	/*
-	 * A new dentry page is allocated but not able to be written, since its
-	 * new inode page couldn't be allocated due to -ENOSPC.
-	 * In such the case, its blkaddr can be remained as NEW_ADDR.
-	 * see, f2fs_add_link -> f2fs_get_new_data_page ->
-	 * f2fs_init_inode_metadata.
-	 */
-	if (dn.data_blkaddr == NEW_ADDR) {
-		zero_user_segment(page, 0, PAGE_SIZE);
-		if (!PageUptodate(page))
-			SetPageUptodate(page);
-		unlock_page(page);
-		return page;
-	}
-	return page;
-put_err:
-	f2fs_put_page(page, 1);
-	return ERR_PTR(err);
-}
 struct page *f2fs_find_data_page(struct inode *inode, pgoff_t index)
 {
 	struct address_space *mapping = inode->i_mapping;
@@ -1911,7 +1864,6 @@ int f2fs_do_remap_data_page(struct f2fs_io_info *fio)
 	set_new_dnode(&dn, inode, NULL, NULL, 0);
 	if (need_inplace_update(fio) &&
 			f2fs_lookup_extent_cache(inode, page->index, &ei)) {
-		printk("inplace update 1.\n");
 		fio->old_blkaddr = ei.blk + page->index - ei.fofs;
 
 		if (!f2fs_is_valid_blkaddr(fio->sbi, fio->old_blkaddr,
@@ -1952,8 +1904,19 @@ got_it:
 	 */
 	if (ipu_force || (is_valid_data_blkaddr(fio->sbi, fio->old_blkaddr) &&
 					need_inplace_update(fio))) {
-		printk("erro:inplace update 2.\n");
-		return 0;
+		err = encrypt_one_page(fio);
+		if (err)
+			goto out_writepage;
+
+		set_page_writeback(page);
+		ClearPageError(page);
+		f2fs_put_dnode(&dn);
+		if (fio->need_lock == LOCK_REQ)
+			f2fs_unlock_op(fio->sbi);
+		err = f2fs_inplace_write_data(fio);
+		trace_f2fs_do_write_data_page(fio->page, IPU);
+		set_inode_flag(inode, FI_UPDATE_WRITE);
+		return err;
 	}
 
 	if (fio->need_lock == LOCK_RETRY) {
@@ -1970,16 +1933,16 @@ got_it:
 
 	fio->version = ni.version;
 
-	err = encrypt_one_page(fio); // not encrypted file.
+	err = encrypt_one_page(fio);
 	if (err)
 		goto out_writepage;
 
-	//set_page_writeback(page);
+//	set_page_writeback(page);
 	ClearPageError(page);
 
 	/* LFS mode write path */
 	f2fs_outplace_remap_data(&dn, fio);
-	trace_f2fs_do_write_data_page(page, OPU);
+//	trace_f2fs_do_write_data_page(page, OPU);
 	set_inode_flag(inode, FI_APPEND_WRITE);
 	if (page->index == 0)
 		set_inode_flag(inode, FI_FIRST_BLOCK_WRITTEN);
