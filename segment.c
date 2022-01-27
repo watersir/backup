@@ -1537,9 +1537,9 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 		blk_start_plug(&plug);
 	
 
-		long long int k = 3160132*10000;
-		long long int up = k * i * (sbi->user_block_count - sbi->total_valid_block_count) / sbi->user_block_count;
-		long long int ssd_invalid = remapSendor(0,0);
+		// long long int k = 3160132*10000;
+		// long long int up = k * i * (sbi->user_block_count - sbi->total_valid_block_count) / sbi->user_block_count;
+		// long long int ssd_invalid = remapSendor(0,0);
 //		printk("1\n");
 		list_for_each_entry_safe(dc, tmp, pend_list, list) {
 			f2fs_bug_on(sbi, dc->state != D_PREP);
@@ -1553,9 +1553,8 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 	//		printk("dele:%ld\n",dele);
 	//		printk("ssd_invalid:%ld\n",ssd_invalid);
 
-			f2fs_bug_on(sbi, dc->state != D_PREP);
-			long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
-			int down = ssd_invalid * dele;
+			// long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
+			// int down = ssd_invalid * dele;
 
 //			if(1)//up > down)
 //				__submit_discard_cmd(sbi, dpolicy, dc, &issued);
@@ -1814,9 +1813,9 @@ static int issue_discard_thread(void *data)
 		flag++;*/
 		sb_start_intwrite(sbi->sb);
 
-	        struct block_device * bdev = sbi->sb->s_bdev;
-	       	struct request_queue * q = bdev_get_queue(bdev);
-	        struct request_list *rl = &q->root_rl;
+		// struct block_device * bdev = sbi->sb->s_bdev;
+		// struct request_queue * q = bdev_get_queue(bdev);
+		// struct request_list *rl = &q->root_rl;
 //	        if(rl->count[BLK_RW_SYNC]+rl->count[BLK_RW_ASYNC] > 0)
 //			printk("***valid***: %d",rl->count[BLK_RW_SYNC]+rl->count[BLK_RW_ASYNC]);
 //		long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
