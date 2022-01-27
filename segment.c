@@ -1015,144 +1015,144 @@ static void __init_discard_policy(struct f2fs_sb_info *sbi,
 		dpolicy->io_aware = false;
 	}
 }
-int rf_getIO(struct f2fs_sb_info *sbi) {
-	struct block_device *bdev = sbi->sb->s_bdev;
-	struct request_queue *q = bdev_get_queue(bdev);
-	struct request_list *rl = &q->root_rl;
-	int sync_io = rl->count[BLK_RW_SYNC];
-	int async_io = rl->count[BLK_RW_ASYNC];
-//	printk("sync_io:%d",sync_io);
-//	printk("async_io:%d",async_io);
-	int congest = BIO_congestion(sbi);
-	int ret = 0;
-	if(sync_io>congest) 
-		ret = 2;
-	if(async_io>congest)
-		ret += 1;
-	return ret;
-}
-inline int rand_j(void) {
-	int j = jiffies;
-//	printk("j:%d",j);
-	int X = jiffies%4096;
-//	printk("X:%d",X);
-//	printk("%d",EPSILON);
-    return X;
-}
-void get_random_bytes(void *buf, int nbytes);
-int selecta(int s,long int * q) {
-    int action = -1;
-	unsigned long j;
-	get_random_bytes(&j, sizeof(unsigned long));
-	printk("j:%ld",j);
-	unsigned int cp = j%8;
-	if(cp < 2){
-		get_random_bytes(&j, sizeof(unsigned long));
-	        action = j%SUM_ACTION;
-		printk("ra:%d",j);
-	} else {
-		long int q_max = LONG_MIN;
-		int i;
-		for(i = 0; i < SUM_ACTION; i++) {
-			int idx = s*SUM_ACTION + i;
-			if(q[idx]>q_max) {
-				q_max = q[idx];
-				action = i;
-			}
-		}
-	}
-    return action;
-}
-static int rf_getSSDinvalid(void) {
-	unsigned int invalid_free = remapSendor(1,0);
-	if(invalid_free!=-1)
-		return invalid_free;
-	else 
-		return 0;
-}
-static int rf_getSSDMIG(void) {
-	unsigned int ssdgc_mig = remapSendor(0,0);
-	if(ssdgc_mig!=-1)
-		return ssdgc_mig;
-	else 
-		return 0;
-}
+// int rf_getIO(struct f2fs_sb_info *sbi) {
+// 	struct block_device *bdev = sbi->sb->s_bdev;
+// 	struct request_queue *q = bdev_get_queue(bdev);
+// 	struct request_list *rl = &q->root_rl;
+// 	int sync_io = rl->count[BLK_RW_SYNC];
+// 	int async_io = rl->count[BLK_RW_ASYNC];
+// //	printk("sync_io:%d",sync_io);
+// //	printk("async_io:%d",async_io);
+// 	int congest = BIO_congestion(sbi);
+// 	int ret = 0;
+// 	if(sync_io>congest) 
+// 		ret = 2;
+// 	if(async_io>congest)
+// 		ret += 1;
+// 	return ret;
+// }
+// inline int rand_j(void) {
+// 	int j = jiffies;
+// //	printk("j:%d",j);
+// 	int X = jiffies%4096;
+// //	printk("X:%d",X);
+// //	printk("%d",EPSILON);
+//     return X;
+// }
+// void get_random_bytes(void *buf, int nbytes);
+// int selecta(int s,long int * q) {
+//     int action = -1;
+// 	unsigned long j;
+// 	get_random_bytes(&j, sizeof(unsigned long));
+// 	printk("j:%ld",j);
+// 	unsigned int cp = j%8;
+// 	if(cp < 2){
+// 		get_random_bytes(&j, sizeof(unsigned long));
+// 	        action = j%SUM_ACTION;
+// 		printk("ra:%d",j);
+// 	} else {
+// 		long int q_max = LONG_MIN;
+// 		int i;
+// 		for(i = 0; i < SUM_ACTION; i++) {
+// 			int idx = s*SUM_ACTION + i;
+// 			if(q[idx]>q_max) {
+// 				q_max = q[idx];
+// 				action = i;
+// 			}
+// 		}
+// 	}
+//     return action;
+// }
+// static int rf_getSSDinvalid(void) {
+// 	unsigned int invalid_free = remapSendor(1,0);
+// 	if(invalid_free!=-1)
+// 		return invalid_free;
+// 	else 
+// 		return 0;
+// }
+// static int rf_getSSDMIG(void) {
+// 	unsigned int ssdgc_mig = remapSendor(0,0);
+// 	if(ssdgc_mig!=-1)
+// 		return ssdgc_mig;
+// 	else 
+// 		return 0;
+// }
 
-static void updateq(int s, int slast, long int * q, int a,
-				struct f2fs_sb_info *sbi,struct discard_cmd_control * dcc) {
-    int mig = rf_getSSDMIG();
-    int io = blocked_size(sbi);
-	printk("mig:%d\n",mig); 
-//	printk("io:%d\n",io); 
-	int io_before = dcc->rf.io;
-//	printk("io_before:%d\n",io_before); 
-	dcc->rf.io = io;
-	int reward_my;
-	if(mig<10000)
-		mig = 10000;
-	reward_my = 10000000/(mig+1);//+(io_before-io); // This value is too big!
-	long int best_q = LONG_MIN;    
-	int i;
-	for(i = 0; i < SUM_ACTION;i++)
-		if(q[s*SUM_ACTION+i]>best_q)
-			best_q = q[s*SUM_ACTION+i];
-	printk("reward_my:%d\n",reward_my);
-//	printk("best_q:%d\n",best_q);
-//	printk("slast:%d\n",slast);
-	printk("alast:%d\n",a);
-//	printk("q[slast*SUM_ACTION+a]:%d\n",q[slast*SUM_ACTION+a]);  	
-//	q[slast*SUM_ACTION+a] = q[slast*SUM_ACTION+a] + (reward_my + best_q/10 - q[slast*SUM_ACTION+a] )/10;
-	if(dcc->rf.mig[slast*SUM_ACTION+a]==5)
-		dcc->rf.mig[slast*SUM_ACTION+a] = 0;
-	printk("dcc->rf.mig[slast*SUM_ACTION+a]:%d\n",dcc->rf.mig[slast*SUM_ACTION+a]);
-	q[slast*SUM_ACTION+a] = reward_my;//(q[slast*SUM_ACTION+a]*dcc->rf.mig[slast*SUM_ACTION+a]+reward_my)/(dcc->rf.mig[slast*SUM_ACTION+a]+1);
+// static void updateq(int s, int slast, long int * q, int a,
+// 				struct f2fs_sb_info *sbi,struct discard_cmd_control * dcc) {
+//     int mig = rf_getSSDMIG();
+//     int io = blocked_size(sbi);
+// 	printk("mig:%d\n",mig); 
+// //	printk("io:%d\n",io); 
+// 	int io_before = dcc->rf.io;
+// //	printk("io_before:%d\n",io_before); 
+// 	dcc->rf.io = io;
+// 	int reward_my;
+// 	if(mig<10000)
+// 		mig = 10000;
+// 	reward_my = 10000000/(mig+1);//+(io_before-io); // This value is too big!
+// 	long int best_q = LONG_MIN;    
+// 	int i;
+// 	for(i = 0; i < SUM_ACTION;i++)
+// 		if(q[s*SUM_ACTION+i]>best_q)
+// 			best_q = q[s*SUM_ACTION+i];
+// 	printk("reward_my:%d\n",reward_my);
+// //	printk("best_q:%d\n",best_q);
+// //	printk("slast:%d\n",slast);
+// 	printk("alast:%d\n",a);
+// //	printk("q[slast*SUM_ACTION+a]:%d\n",q[slast*SUM_ACTION+a]);  	
+// //	q[slast*SUM_ACTION+a] = q[slast*SUM_ACTION+a] + (reward_my + best_q/10 - q[slast*SUM_ACTION+a] )/10;
+// 	if(dcc->rf.mig[slast*SUM_ACTION+a]==5)
+// 		dcc->rf.mig[slast*SUM_ACTION+a] = 0;
+// 	printk("dcc->rf.mig[slast*SUM_ACTION+a]:%d\n",dcc->rf.mig[slast*SUM_ACTION+a]);
+// 	q[slast*SUM_ACTION+a] = reward_my;//(q[slast*SUM_ACTION+a]*dcc->rf.mig[slast*SUM_ACTION+a]+reward_my)/(dcc->rf.mig[slast*SUM_ACTION+a]+1);
 
-	printk("q[slast*SUM_ACTION+a]:%d\n",q[slast*SUM_ACTION+a]);
-	dcc->rf.mig[slast*SUM_ACTION+a]++;
-}
-//void printQ(struct discard_cmd_control * dcc) {
-//	int i,j;
-//    for (i=0; i<STATE_TYPE; ++i) {   
-//        for (j=0; j<SUM_ACTION;++j) {
-//            printk("%f ", dcc->rf.q[i*SUM_ACTION+j]);
-//        }
-//        printk(";");
-//        if (i % 8 == 7)
-//            printk("\n");
- //   }
-//}
-static void reinforcementLearningStudy(struct f2fs_sb_info *sbi,
-				struct discard_policy *dpolicy, int discard_type,struct discard_cmd_control * dcc) {
-	int s_io = 0;//rf_getIO(sbi);
-	int s_ssd = 0;//rf_getSSDinvalid();
-	int s = s_io*SSD_INVALID_TYPE+s_ssd;
-	printk("s_io:%d\n",s_io);
-//	printk("s_ssd:%d\n",s_ssd);
-//       printk("s:%d\n",s);
-    int a = selecta(s,dcc->rf.q);
-	int granularity_no = a / DISCARD_NUM;
-	int discard_num_no = a%DISCARD_NUM;
-	if(granularity_no==0)
-		dpolicy->granularity = MIN_DISCARD_0;
-	else 
-		dpolicy->granularity = MIN_DISCARD_1;
-	if(discard_num_no==0)
-		dpolicy->max_requests = DISCARD_NUM_0;
-	else if(discard_num_no==1)
-		dpolicy->max_requests = DISCARD_NUM_1;
-	else if(discard_num_no==2)
-		dpolicy->max_requests = DISCARD_NUM_2;
-	else
-		dpolicy->max_requests = DISCARD_NUM_3;
-        printk("a:%d\n",a);
+// 	printk("q[slast*SUM_ACTION+a]:%d\n",q[slast*SUM_ACTION+a]);
+// 	dcc->rf.mig[slast*SUM_ACTION+a]++;
+// }
+// //void printQ(struct discard_cmd_control * dcc) {
+// //	int i,j;
+// //    for (i=0; i<STATE_TYPE; ++i) {   
+// //        for (j=0; j<SUM_ACTION;++j) {
+// //            printk("%f ", dcc->rf.q[i*SUM_ACTION+j]);
+// //        }
+// //        printk(";");
+// //        if (i % 8 == 7)
+// //            printk("\n");
+//  //   }
+// //}
+// static void reinforcementLearningStudy(struct f2fs_sb_info *sbi,
+// 				struct discard_policy *dpolicy, int discard_type,struct discard_cmd_control * dcc) {
+// 	int s_io = 0;//rf_getIO(sbi);
+// 	int s_ssd = 0;//rf_getSSDinvalid();
+// 	int s = s_io*SSD_INVALID_TYPE+s_ssd;
+// 	printk("s_io:%d\n",s_io);
+// //	printk("s_ssd:%d\n",s_ssd);
+// //       printk("s:%d\n",s);
+//     int a = selecta(s,dcc->rf.q);
+// 	int granularity_no = a / DISCARD_NUM;
+// 	int discard_num_no = a%DISCARD_NUM;
+// 	if(granularity_no==0)
+// 		dpolicy->granularity = MIN_DISCARD_0;
+// 	else 
+// 		dpolicy->granularity = MIN_DISCARD_1;
+// 	if(discard_num_no==0)
+// 		dpolicy->max_requests = DISCARD_NUM_0;
+// 	else if(discard_num_no==1)
+// 		dpolicy->max_requests = DISCARD_NUM_1;
+// 	else if(discard_num_no==2)
+// 		dpolicy->max_requests = DISCARD_NUM_2;
+// 	else
+// 		dpolicy->max_requests = DISCARD_NUM_3;
+//         printk("a:%d\n",a);
 
-	// update state.
-    dcc->rf.slast = dcc->rf.s;
-    dcc->rf.s = s;
-	// learn q.
-    updateq(dcc->rf.s,dcc->rf.slast,dcc->rf.q,dcc->rf.a,sbi,dcc);
-    dcc->rf.a = a;
-}
+// 	// update state.
+//     dcc->rf.slast = dcc->rf.s;
+//     dcc->rf.s = s;
+// 	// learn q.
+//     updateq(dcc->rf.s,dcc->rf.slast,dcc->rf.q,dcc->rf.a,sbi,dcc);
+//     dcc->rf.a = a;
+// }
 
 static void __update_discard_tree_range(struct f2fs_sb_info *sbi,
 				struct block_device *bdev, block_t lstart,
@@ -1512,6 +1512,13 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 	int i, issued = 0;
 	bool io_interrupted = false;
 
+	printk("w:%ld\n",sbi->write_for_trim);	
+	printk("1:%d\n",sbi->discard_blks);
+	printk("2:%d\n",dcc->nr_discards);
+	printk("3:%d\n",dcc->undiscard_blks);
+// 	printk("4:%d\n",atomic_read(&dcc->issing_discard));
+// 	printk("5:%d\n",atomic_read(&dcc->discard_cmd_cnt));
+
 	for (i = MAX_PLIST_NUM - 1; i >= 0; i--) {
 		if (i + 1 < dpolicy->granularity)
 			break;
@@ -1548,6 +1555,11 @@ next:
 
 		if (issued >= dpolicy->max_requests || io_interrupted)
 			break;
+	}
+
+	if(!issued && !io_interrupted) {
+		sbi->write_for_trim = 0;
+		printk("w reset!\n");
 	}
 
 	if (!issued && io_interrupted)

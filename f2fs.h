@@ -1412,15 +1412,15 @@ static inline bool is_idle(struct f2fs_sb_info *sbi)
 	return f2fs_time_over(sbi, REQ_TIME);
 }
 
-static inline int blocked_size(struct f2fs_sb_info *sbi)
-{
-	struct block_device *bdev = sbi->sb->s_bdev;
-	struct request_queue *q = bdev_get_queue(bdev);
-	printk("q->nr_congestion_on:%d\n",q->nr_congestion_on);
-	printk("q->nr_congestion_off:%d\n",q->nr_congestion_off);
-	struct request_list *rl = &q->root_rl;
-	return (rl->count[BLK_RW_SYNC] + rl->count[BLK_RW_ASYNC]);
-}
+// static inline int blocked_size(struct f2fs_sb_info *sbi)
+// {
+// 	struct block_device *bdev = sbi->sb->s_bdev;
+// 	struct request_queue *q = bdev_get_queue(bdev);
+// 	printk("q->nr_congestion_on:%d\n",q->nr_congestion_on);
+// 	printk("q->nr_congestion_off:%d\n",q->nr_congestion_off);
+// 	struct request_list *rl = &q->root_rl;
+// 	return (rl->count[BLK_RW_SYNC] + rl->count[BLK_RW_ASYNC]);
+// }
 static inline int  BIO_congestion(struct f2fs_sb_info *sbi)
 {
 	struct block_device *bdev = sbi->sb->s_bdev;
