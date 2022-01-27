@@ -1557,10 +1557,10 @@ next:
 			break;
 	}
 
-	if(!issued && !io_interrupted) {
-		sbi->write_for_trim = 0;
-		printk("w reset!\n");
-	}
+	// if(!issued && !io_interrupted) {
+	// 	sbi->write_for_trim = 0;
+	// 	printk("w reset!\n");
+	// }
 
 	if (!issued && io_interrupted)
 		issued = -1;
