@@ -1275,12 +1275,6 @@ static void commit_checkpoint(struct f2fs_sb_info *sbi,
 
 static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 {
-//	remapSendor(2,0);
-	struct block_device * bdev = sbi->sb->s_bdev;
-	struct request_queue * q = bdev_get_queue(bdev);
-	struct request_list *rl = &q->root_rl;
-//	printk("valid : %d",rl->count[BLK_RW_SYNC]+rl->count[BLK_RW_ASYNC]);
-	printk("sbi->valid:%d\n",sbi->total_valid_block_count);
 	struct f2fs_checkpoint *ckpt = F2FS_CKPT(sbi);
 	struct f2fs_nm_info *nm_i = NM_I(sbi);
 	unsigned long orphan_num = sbi->im[ORPHAN_INO].ino_num, flags;
@@ -1453,7 +1447,7 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		set_sbi_flag(sbi, SBI_IS_DIRTY);
 
 	f2fs_bug_on(sbi, get_pages(sbi, F2FS_DIRTY_DENTS));
-//	remapSendor(2,1);
+
 	return unlikely(f2fs_cp_error(sbi)) ? -EIO : 0;
 }
 
@@ -1482,24 +1476,22 @@ int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	}
 
 	trace_f2fs_write_checkpoint(sbi->sb, cpc->reason, "start block_ops");
-	printk("00\n");
+
 	err = block_operations(sbi);
 	if (err)
 		goto out;
 
-
 	trace_f2fs_write_checkpoint(sbi->sb, cpc->reason, "finish block_ops");
 
 	f2fs_flush_merged_writes(sbi);
-	printk("01\n");
+
 	/* this is the case of multiple fstrims without any changes */
 	if (cpc->reason & CP_DISCARD) {
-		printk("02\n");
 		if (!f2fs_exist_trim_candidates(sbi, cpc)) {
 			unblock_operations(sbi);
 			goto out;
 		}
-		printk("03\n");
+
 		if (NM_I(sbi)->dirty_nat_cnt == 0 &&
 				SIT_I(sbi)->dirty_sentries == 0 &&
 				prefree_segments(sbi) == 0) {
@@ -1509,7 +1501,7 @@ int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 			goto out;
 		}
 	}
-	printk("04\n");
+
 	/*
 	 * update checkpoint pack index
 	 * Increase the version number so that

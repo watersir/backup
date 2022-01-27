@@ -2823,7 +2823,6 @@ try_onemore:
 		return -ENOMEM;
 
 	sbi->sb = sb;
-//	sbi->write_for_trim = 0;
 
 	/* Load the checksum driver */
 	sbi->s_chksum_driver = crypto_alloc_shash("crc32", 0, 0);
