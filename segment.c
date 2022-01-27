@@ -1512,12 +1512,12 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 	int i, issued = 0;
 	bool io_interrupted = false;
 
-	printk("w:%ld\n",sbi->write_for_trim);	
-	printk("1:%d\n",sbi->discard_blks);
-	printk("2:%d\n",dcc->nr_discards);
-	printk("3:%d\n",dcc->undiscard_blks);
- 	printk("4:%d\n",atomic_read(&dcc->issing_discard));
- 	printk("5:%d\n",atomic_read(&dcc->discard_cmd_cnt));
+	// printk("w:%ld\n",sbi->write_for_trim);	
+	// printk("1:%d\n",sbi->discard_blks);
+	// printk("2:%d\n",dcc->nr_discards);
+	// printk("3:%d\n",dcc->undiscard_blks);
+ 	// printk("4:%d\n",atomic_read(&dcc->issing_discard));
+ 	// printk("5:%d\n",atomic_read(&dcc->discard_cmd_cnt));
 
 	for (i = MAX_PLIST_NUM - 1; i >= 0; i--) {
 		if (i + 1 < dpolicy->granularity)
