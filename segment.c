@@ -1031,14 +1031,14 @@ static void __init_discard_policy(struct f2fs_sb_info *sbi,
 // 		ret += 1;
 // 	return ret;
 // }
-// inline int rand_j(void) {
-// 	int j = jiffies;
-// //	printk("j:%d",j);
-// 	int X = jiffies%4096;
-// //	printk("X:%d",X);
-// //	printk("%d",EPSILON);
-//     return X;
-// }
+inline int rand_j(void) {
+	int j = jiffies;
+//	printk("j:%d",j);
+	int X = jiffies%4096;
+//	printk("X:%d",X);
+//	printk("%d",EPSILON);
+    return X;
+}
 // void get_random_bytes(void *buf, int nbytes);
 // int selecta(int s,long int * q) {
 //     int action = -1;
