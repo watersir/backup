@@ -989,7 +989,7 @@ static void __init_discard_policy(struct f2fs_sb_info *sbi,
 	dpolicy->ordered = false;
 	dpolicy->granularity = granularity;
 
-	dpolicy->max_requests = DEF_MAX_DISCARD_REQUEST;
+	dpolicy->max_requests = 80000000;//DEF_MAX_DISCARD_REQUEST;
 	dpolicy->io_aware_gran = MAX_PLIST_NUM;
 
 	if (discard_type == DPOLICY_BG) {
@@ -1623,7 +1623,7 @@ static int issue_discard_thread(void *data)
 			continue;
 		}
 
-		if (sbi->gc_mode == GC_URGENT)
+//		if (sbi->gc_mode == GC_URGENT)
 			__init_discard_policy(sbi, &dpolicy, DPOLICY_FORCE, 1);
 
 		sb_start_intwrite(sbi->sb);
