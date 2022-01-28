@@ -1317,7 +1317,6 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		ckpt->alloc_type[i + CURSEG_HOT_DATA] =
 				curseg_alloc_type(sbi, i + CURSEG_HOT_DATA);
 	}
-	printk("05\n");
 	/* 2 cp  + n data seg summary + orphan inode blocks */
 	data_sum_blocks = f2fs_npages_for_summary_flush(sbi, false);
 	spin_lock_irqsave(&sbi->cp_lock, flags);
@@ -1342,7 +1341,6 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 	/* update ckpt flag for checkpoint */
 	update_ckpt_flags(sbi, cpc);
-	printk("06\n");
 	/* update SIT/NAT bitmap */
 	get_sit_bitmap(sbi, __bitmap_ptr(sbi, SIT_BITMAP));
 	get_nat_bitmap(sbi, __bitmap_ptr(sbi, NAT_BITMAP));
@@ -1412,7 +1410,7 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 	/* wait for previous submitted meta pages writeback */
 	f2fs_wait_on_all_pages_writeback(sbi);
-	printk("07\n");
+
 	/* flush all device cache */
 	err = f2fs_flush_device_cache(sbi);
 	if (err)
@@ -1445,7 +1443,7 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	if (get_pages(sbi, F2FS_DIRTY_NODES) ||
 			get_pages(sbi, F2FS_DIRTY_IMETA))
 		set_sbi_flag(sbi, SBI_IS_DIRTY);
-	printk("08\n");
+
 	f2fs_bug_on(sbi, get_pages(sbi, F2FS_DIRTY_DENTS));
 
 	return unlikely(f2fs_cp_error(sbi)) ? -EIO : 0;
