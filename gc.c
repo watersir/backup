@@ -16,136 +16,12 @@
 #include <linux/kthread.h>
 #include <linux/delay.h>
 #include <linux/freezer.h>
-
+//ig
 #include "f2fs.h"
 #include "node.h"
 #include "segment.h"
 #include "gc.h"
 #include <trace/events/f2fs.h>
-
-struct nvme_passthru_cmd {
-	__u8	opcode;
-	__u8	flags;
-	__u16	rsvd1;
-	__u32	nsid;
-	__u32	cdw2;
-	__u32	cdw3;
-	__u64	metadata;
-	__u64	addr;
-	__u32	metadata_len;
-	__u32	data_len;
-	__u32	cdw10;
-	__u32	cdw11;
-	__u32	cdw12;
-	__u32	cdw13;
-	__u32	cdw14;
-	__u32	cdw15;
-	__u32	timeout_ms;
-	__u32	result;
-};
-extern int nvme_kernel_iocmd(struct block_device *dev, struct nvme_passthru_cmd *ucmd);
-#define REMAP 0x93
-int remapSSD(unsigned int ori_lba,unsigned int new_lba,int len) {
-	
-	struct file *filp = NULL;
-    mm_segment_t oldfs;
-    int err = 0;
-	struct block_device *b_dev;
-	u32 result;
-	int err2;
-	struct nvme_passthru_cmd cmd;
-	int ret;
-
-    oldfs = get_fs();
-    set_fs(get_ds());
-    filp = filp_open("/dev/nvme0n1", O_RDONLY, 0);
-    set_fs(oldfs);
-    if (IS_ERR(filp)) {
-        err = PTR_ERR(filp);
-		printk("Unable to open stats file to write\n");
-        return -1;
-    }
-
-	cmd.opcode = REMAP;
-	cmd.nsid = 1;
-	cmd.cdw10 = ori_lba;
-	cmd.cdw11 = new_lba;
-	cmd.cdw12 = len;
-	cmd.flags = 0;
-
-	b_dev = filp->f_inode->i_bdev;
-	err2 = nvme_kernel_iocmd(b_dev,&cmd);
-
-	filp_close(filp, NULL);
-	result = cmd.result;
-	printk("ori_lba:%d\n",ori_lba);
-	printk("new_lba:%d\n",new_lba);
-	printk("err2:%d\n",err2);
-	printk("result:%d\n",result);
-	ret = min(result & 0xffff,result >> 16) + 1;
-	if(ret>=0){
-		printk("remap success!\n");	
-		return 0;
-	} else {
-		printk("remap failed!\n"); 
-		return -1;
-	}
-}
-#define START 0
-#define END 1
-#define SEND 0
-int remapSendor(int is_start, int gc_type) {
-	
-	struct file *filp = NULL;
-    mm_segment_t oldfs;
-    int err = 0;
-        struct block_device *b_dev;
-        u32 result;
-        int err2;
-        struct nvme_passthru_cmd cmd;
-        int ret;
-
-
-    oldfs = get_fs();
-    set_fs(get_ds());
-    filp = filp_open("/dev/nvme0n1", O_RDONLY, 0);
-    set_fs(oldfs);
-    if (IS_ERR(filp)) {
-        err = PTR_ERR(filp);
-		printk("Unable to open stats file to write\n");
-        return -1;
-    }
-
-	cmd.opcode = REMAP;
-	cmd.nsid = 1;
-	cmd.cdw10 = gc_type;
-//	if(is_start==1)
-//		cmd.cdw11  = START;
-//	else if(is_start==0)
-//		cmd.cdw11  = END;
-//	else if(is_start==2)
-//		cmd.cdw11  = 2;
-	cmd.cdw11 = is_start;
-	cmd.cdw12 = SEND; // cdw12 < 0 means: send message.
-	cmd.flags = 0;
-
-	b_dev = filp->f_inode->i_bdev;
-	err2 = nvme_kernel_iocmd(b_dev,&cmd);
-
-	filp_close(filp, NULL);
-	result = cmd.result;
-//	printk("err2:%d\n",err2);
-//	printk("result:%d\n",result);
-	ret = min(result & 0xffff,result >> 16) + 1;
-	if(ret>=0){
-//		printk("SEND success!\n");	
-		return result;
-	} else {
-//		printk("SEND failed!\n"); 
-		return -1;
-	}
-}
-
 
 static int gc_thread_func(void *data)
 {
@@ -595,10 +471,7 @@ static void gc_node_segment(struct f2fs_sb_info *sbi,
 	int off;
 	int phase = 0;
 	bool fggc = (gc_type == FG_GC);
-        if(gc_type==FG_GC) 
-                printk("NODE FG\n");
 
-	
 	start_addr = START_BLOCK(sbi, segno);
 
 next_step:
@@ -1005,11 +878,7 @@ retry:
 
 		set_cold_data(page);
 
-//		if(is_dirty) {	
-			err = f2fs_do_write_data_page(&fio);
-//		} else {
-//			err = f2fs_do_remap_data_page(&fio);
-//		}
+		err = f2fs_do_write_data_page(&fio);
 		if (err) {
 			clear_cold_data(page);
 			if (err == -ENOMEM) {
@@ -1018,14 +887,85 @@ retry:
 			}
 			if (is_dirty)
 				set_page_dirty(page);
-//			else
-//				ClearPageDirty(page);
 		}
 	}
 out:
 	f2fs_put_page(page, 1);
 }
+static void remap_data_page(struct inode *inode, block_t bidx, int gc_type,
+							unsigned int segno, int off)
+{
+	struct page *page;
+	printk("remap f\n");
+	page = find_get_entry(inode->i_mapping, bidx);//f2fs_get_cached_data_page(inode,bidx, true);
+//	page = f2fs_get_lock_data_page(inode, bidx, true);
+	if (IS_ERR(page)){
+		printk("page erro\n");
+		return;
+	}
+	printk("get cached page ok\n");
+	if (!check_valid_map(F2FS_I_SB(inode), segno, off))
+		goto out;
 
+	if (f2fs_is_atomic_file(inode)) {
+		F2FS_I(inode)->i_gc_failures[GC_FAILURE_ATOMIC]++;
+		F2FS_I_SB(inode)->skipped_atomic_files[gc_type]++;
+		goto out;
+	}
+	if (f2fs_is_pinned_file(inode)) {
+		if (gc_type == FG_GC)
+			f2fs_pin_file_control(inode, true);
+		goto out;
+	}
+
+	if (gc_type == BG_GC) {
+		if (PageWriteback(page))
+			goto out;
+		set_page_dirty(page);
+		set_cold_data(page);
+	} else {
+		struct f2fs_io_info fio = {
+			.sbi = F2FS_I_SB(inode),
+			.ino = inode->i_ino,
+			.type = DATA,
+			.temp = COLD,
+			.op = REQ_OP_WRITE,
+			.op_flags = REQ_SYNC,
+			.old_blkaddr = NULL_ADDR,
+			.page = page,
+			.encrypted_page = NULL,
+			.need_lock = LOCK_REQ,
+			.io_type = FS_GC_DATA_IO,
+		};
+//		bool is_dirty = PageDirty(page);
+//		printk("dirty?%d\n",is_dirty);
+		int err;
+
+retry:
+//		set_page_dirty(page);
+//		f2fs_wait_on_page_writeback(page, DATA, true);
+//		if (clear_page_dirty_for_io(page)) { // 清除旧页的脏页标志
+//			inode_dec_dirty_pages(inode);
+//			f2fs_remove_dirty_inode(inode);
+//		}
+
+//		set_cold_data(page);
+
+		err = f2fs_do_remap_data_page(&fio);
+		if (err) {
+//			clear_cold_data(page);
+			if (err == -ENOMEM) {
+				congestion_wait(BLK_RW_ASYNC, HZ/50);
+				goto retry;
+			}
+//			if (is_dirty)
+//				set_page_dirty(page);
+		}
+	}
+out:
+	printk("out:\n");
+	f2fs_put_page(page, 1);
+}
 /*
  * This function tries to get parent node of victim data block, and identifies
  * data block validity. If the block is valid, copy that with cold status and
@@ -1041,8 +981,7 @@ static void gc_data_segment(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 	block_t start_addr;
 	int off;
 	int phase = 0;
-	if(gc_type==FG_GC)
-		printk("DATA FG\n");
+
 	start_addr = START_BLOCK(sbi, segno);
 
 next_step:
@@ -1150,7 +1089,7 @@ next_step:
 
 			start_bidx = f2fs_start_bidx_of_node(nofs, inode)
 								+ ofs_in_node;
-			if (f2fs_post_read_required(inode))
+			if (f2fs_post_read_required(inode)) // encrypted.
 				move_data_block(inode, start_bidx, gc_type,
 								segno, off);
 			else
@@ -1169,7 +1108,156 @@ next_step:
 	if (++phase < 5)
 		goto next_step;
 }
+static void gc_data_segment_FG(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
+		struct gc_inode_list *gc_list, unsigned int segno, int gc_type)
+{
+	struct super_block *sb = sbi->sb;
+	struct f2fs_summary *entry;
+	block_t start_addr;
+	int off;
+	int phase = 0;
+	int * array;
+	array = kzalloc(sizeof(int)*512,GFP_KERNEL);
+	
+	start_addr = START_BLOCK(sbi, segno);
+	printk("gc data:%x\n",start_addr);
+next_step:
+	entry = sum;
 
+	for (off = 0; off < sbi->blocks_per_seg; off++, entry++) {
+		struct page *data_page;
+		struct inode *inode;
+		struct node_info dni; /* dnode info for the data */
+		unsigned int ofs_in_node, nofs;
+		block_t start_bidx;
+		nid_t nid = le32_to_cpu(entry->nid);
+
+		/* stop BG_GC if there is not enough free sections. */
+		if (gc_type == BG_GC && has_not_enough_free_secs(sbi, 0, 0))
+			return;
+
+		if (check_valid_map(sbi, segno, off) == 0)
+			continue;
+
+		if (phase == 0) {
+			f2fs_ra_meta_pages(sbi, NAT_BLOCK_OFFSET(nid), 1,
+							META_NAT, true); // read ahead nat page.
+			continue;
+		}
+
+		if (phase == 1) {
+			f2fs_ra_node_page(sbi, nid);  // read ahead the nid page.
+			continue;
+		}
+
+		/* Get an inode by ino with checking validity */
+		if (!is_alive(sbi, entry, &dni, start_addr + off, &nofs))
+			continue;
+
+		if (phase == 2) {
+			f2fs_ra_node_page(sbi, dni.ino); // read ahead the inode page.
+			continue;
+		}
+
+		ofs_in_node = le16_to_cpu(entry->ofs_in_node);
+
+		if (phase == 3) {
+			inode = f2fs_iget(sb, dni.ino);
+			if (IS_ERR(inode) || is_bad_inode(inode))
+				continue;
+
+			if (!down_write_trylock(
+				&F2FS_I(inode)->i_gc_rwsem[WRITE])) {
+				iput(inode);
+				sbi->skipped_gc_rwsem++;
+				continue;
+			}
+
+			start_bidx = f2fs_start_bidx_of_node(nofs, inode) +
+								ofs_in_node;
+
+			if (f2fs_post_read_required(inode)) { // judge wheather the file is encrypted.
+				printk("FG_GC:Sad...encrypted.\n");
+				int err = ra_data_block(inode, start_bidx); // for encrypted.
+
+				up_write(&F2FS_I(inode)->i_gc_rwsem[WRITE]); // 释放写锁
+				if (err) {
+					iput(inode);
+					continue;
+				}
+				add_gc_inode(gc_list, inode);
+				continue;
+			}
+
+			data_page = f2fs_get_read_data_page(inode,start_bidx, REQ_RAHEAD, true);
+			//data_page = f2fs_get_cached_data_page(inode,start_bidx, true);
+			up_write(&F2FS_I(inode)->i_gc_rwsem[WRITE]);
+			if (IS_ERR(data_page)) {
+				iput(inode);
+				continue;
+			}
+			if (PageDirty(data_page)) {
+				array[off] = 1;
+				printk("off=1:%d",off);
+			} else {
+				printk("off=0:%d\n",off);
+			}
+
+		//	printk("put_page:\n");
+			f2fs_put_page(data_page, 0); // when need to put page.
+		//	printk("end\n");
+			add_gc_inode(gc_list, inode);
+			continue;
+		}
+
+		/* phase 4 */
+		inode = find_gc_inode(gc_list, dni.ino);
+		if (inode) {
+			struct f2fs_inode_info *fi = F2FS_I(inode);
+			bool locked = false;
+
+			if (S_ISREG(inode->i_mode)) { // judge wheather a normal file.
+				if (!down_write_trylock(&fi->i_gc_rwsem[READ])) {
+					sbi->skipped_gc_rwsem++;
+					continue;
+				}
+				if (!down_write_trylock( // try to get the resem, will not fall asleep.
+						&fi->i_gc_rwsem[WRITE])) {
+					sbi->skipped_gc_rwsem++;
+					up_write(&fi->i_gc_rwsem[READ]);
+					continue;
+				}
+				locked = true;
+
+				/* wait for all inflight aio data */
+				inode_dio_wait(inode);
+			}
+
+			start_bidx = f2fs_start_bidx_of_node(nofs, inode)
+								+ ofs_in_node;
+			if (f2fs_post_read_required(inode))
+				move_data_block(inode, start_bidx, gc_type,
+								segno, off);
+			else{
+				if(array[off]) // if set bit: in the page cache.
+					move_data_page(inode, start_bidx, gc_type,segno, off);
+				else{
+					remap_data_page(inode, start_bidx, gc_type,segno, off);
+				}
+			}
+
+			if (locked) {
+				up_write(&fi->i_gc_rwsem[WRITE]);
+				up_write(&fi->i_gc_rwsem[READ]);
+			}
+
+			stat_inc_data_blk_count(sbi, 1, gc_type);
+		}
+	}
+
+	if (++phase < 5)
+		goto next_step;
+}
 static int __get_victim(struct f2fs_sb_info *sbi, unsigned int *victim,
 			int gc_type)
 {
@@ -1237,13 +1325,16 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 		 *   - down_read(sentry_lock)     - change_curseg()
 		 *                                  - lock_page(sum_page)
 		 */
-//		remapSendor(1,gc_type);
 		if (type == SUM_TYPE_NODE)
 			gc_node_segment(sbi, sum->entries, segno, gc_type);
-		else
-			gc_data_segment(sbi, sum->entries, gc_list, segno,
-								gc_type);
-//		remapSendor(0,gc_type);
+		else{
+			if(gc_type==BG_GC)
+				gc_data_segment(sbi, sum->entries, gc_list, segno,gc_type);
+			else	
+				gc_data_segment_FG(sbi, sum->entries, gc_list, segno,gc_type);
+		}
+			
+
 		stat_inc_seg_count(sbi, type, gc_type);
 
 freed:
@@ -1303,10 +1394,7 @@ gc_more:
 		goto stop;
 	}
 
-
-	printk("0 gc_type:%d\n",gc_type);
 	if (gc_type == BG_GC && has_not_enough_free_secs(sbi, 0, 0)) {
-                printk("In\n");
 		/*
 		 * For example, if there are many prefree_segments below given
 		 * threshold, we can make them free by checkpoint. Then, we
@@ -1317,10 +1405,8 @@ gc_more:
 			if (ret)
 				goto stop;
 		}
-		if (has_not_enough_free_secs(sbi, 0, 0)){
+		if (has_not_enough_free_secs(sbi, 0, 0))
 			gc_type = FG_GC;
-			printk("! gc_type change to:%d\n",gc_type);
-		}
 	}
 
 	/* f2fs_balance_fs doesn't need to do BG_GC in critical path. */
@@ -1368,7 +1454,6 @@ gc_more:
 		}
 		if (gc_type == FG_GC)
 			ret = f2fs_write_checkpoint(sbi, &cpc);
-		printk("FG cp down.\n");
 	}
 stop:
 	SIT_I(sbi)->last_victim[ALLOC_NEXT] = 0;

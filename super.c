@@ -2823,7 +2823,6 @@ try_onemore:
 		return -ENOMEM;
 
 	sbi->sb = sb;
-//	sbi->write_for_trim = 0;
 
 	/* Load the checksum driver */
 	sbi->s_chksum_driver = crypto_alloc_shash("crc32", 0, 0);
@@ -2915,6 +2914,7 @@ try_onemore:
 
 	/* init f2fs-specific super block info */
 	sbi->valid_super_block = valid_super_block;
+	sbi->write_for_trim = 0;
 	mutex_init(&sbi->gc_mutex);
 	mutex_init(&sbi->writepages);
 	mutex_init(&sbi->cp_mutex);

@@ -307,36 +307,6 @@ struct discard_policy {
 	unsigned int granularity;	/* discard granularity */
 };
 
-// FXL :add for reinforcement learning.
-#define SEED 65535      // 随机数SEED
-#define EPSILON 4096/10*3
-// for state
-// idle,async heavy，sync heavy , both heavy
-#define IO_TYPE 4
-#define SSD_INVALID_TYPE 4
-#define STATE_TYPE  IO_TYPE*SSD_INVALID_TYPE
-// for action
-#define MIN_DISCARD 2
-#define DISCARD_NUM 4
-#define SUM_ACTION MIN_DISCARD*DISCARD_NUM
-#define MIN_DISCARD_0 1
-#define MIN_DISCARD_1 8
-#define DISCARD_NUM_0 8
-#define DISCARD_NUM_1 100
-#define DISCARD_NUM_2 1000
-#define DISCARD_NUM_3 10000
-// for review
-#define ALPHA 2
-#define BETA 2
-#define K 0.1
-struct ReinforcementLearning {
-	int s; // state
-	int io;
-	long int * q;
-	long int * mig;
-	int slast;
-	int a;
-};
 struct discard_cmd_control {
 	struct task_struct *f2fs_issue_discard;	/* discard thread */
 	struct list_head entry_list;		/* 4KB discard entry list */
@@ -356,7 +326,6 @@ struct discard_cmd_control {
 	atomic_t discard_cmd_cnt;		/* # of cached cmd count */
 	struct rb_root root;			/* root of discard rb-tree */
 	bool rbtree_check;			/* config for consistence check */
-	struct ReinforcementLearning rf;
 };
 
 /* for the list of fsync inodes, used only during recovery */
@@ -1412,21 +1381,6 @@ static inline bool is_idle(struct f2fs_sb_info *sbi)
 	return f2fs_time_over(sbi, REQ_TIME);
 }
 
-// static inline int blocked_size(struct f2fs_sb_info *sbi)
-// {
-// 	struct block_device *bdev = sbi->sb->s_bdev;
-// 	struct request_queue *q = bdev_get_queue(bdev);
-// 	printk("q->nr_congestion_on:%d\n",q->nr_congestion_on);
-// 	printk("q->nr_congestion_off:%d\n",q->nr_congestion_off);
-// 	struct request_list *rl = &q->root_rl;
-// 	return (rl->count[BLK_RW_SYNC] + rl->count[BLK_RW_ASYNC]);
-// }
-static inline int  BIO_congestion(struct f2fs_sb_info *sbi)
-{
-	struct block_device *bdev = sbi->sb->s_bdev;
-	struct request_queue *q = bdev_get_queue(bdev);
-	return q->nr_congestion_on;
-}
 /*
  * Inline functions
  */
@@ -2061,6 +2015,7 @@ static inline struct page *f2fs_grab_cache_page(struct address_space *mapping,
 	struct page *page;
 
 	if (IS_ENABLED(CONFIG_F2FS_FAULT_INJECTION)) {
+		printk("in if:1\n");
 		if (!for_write)
 			page = find_get_page_flags(mapping, index,
 							FGP_LOCK | FGP_ACCESSED);
@@ -2074,9 +2029,10 @@ static inline struct page *f2fs_grab_cache_page(struct address_space *mapping,
 			return NULL;
 		}
 	}
-
+//	printk("out if:1\n");
 	if (!for_write)
 		return grab_cache_page(mapping, index);
+//	printk("out if:2\n");
 	return grab_cache_page_write_begin(mapping, index, AOP_FLAG_NOFS);
 }
 
@@ -2985,8 +2941,6 @@ void f2fs_destroy_node_manager_caches(void);
 /*
  * segment.c
  */
-void f2fs_outplace_remap_data(struct dnode_of_data *dn,
-					struct f2fs_io_info *fio);
 bool f2fs_need_SSR(struct f2fs_sb_info *sbi);
 void f2fs_register_inmem_page(struct inode *inode, struct page *page);
 void f2fs_drop_inmem_pages_all(struct f2fs_sb_info *sbi, bool gc_failure);
@@ -3020,6 +2974,8 @@ void f2fs_do_write_meta_page(struct f2fs_sb_info *sbi, struct page *page,
 void f2fs_do_write_node_page(unsigned int nid, struct f2fs_io_info *fio);
 void f2fs_outplace_write_data(struct dnode_of_data *dn,
 			struct f2fs_io_info *fio);
+void f2fs_outplace_remap_data(struct dnode_of_data *dn,
+struct f2fs_io_info *fio);
 int f2fs_inplace_write_data(struct f2fs_io_info *fio);
 void f2fs_do_replace_block(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 			block_t old_blkaddr, block_t new_blkaddr,
@@ -3090,7 +3046,6 @@ void f2fs_destroy_checkpoint_caches(void);
 /*
  * data.c
  */
-int f2fs_do_remap_data_page(struct f2fs_io_info *fio);
 int f2fs_init_post_read_processing(void);
 void f2fs_destroy_post_read_processing(void);
 void f2fs_submit_merged_write(struct f2fs_sb_info *sbi, enum page_type type);
@@ -3115,9 +3070,11 @@ struct page *f2fs_get_read_data_page(struct inode *inode, pgoff_t index,
 struct page *f2fs_find_data_page(struct inode *inode, pgoff_t index);
 struct page *f2fs_get_lock_data_page(struct inode *inode, pgoff_t index,
 			bool for_write);
+struct page *f2fs_get_cached_data_page(struct inode *inode, pgoff_t index,bool for_write);
 struct page *f2fs_get_new_data_page(struct inode *inode,
 			struct page *ipage, pgoff_t index, bool new_i_size);
 int f2fs_do_write_data_page(struct f2fs_io_info *fio);
+int f2fs_do_remap_data_page(struct f2fs_io_info *fio);
 int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map,
 			int create, int flag);
 int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
@@ -3137,8 +3094,6 @@ void f2fs_clear_radix_tree_dirty_tag(struct page *page);
 /*
  * gc.c
  */
-int remapSendor(int is_start, int gc_type);
-int remapSSD(unsigned int ori_lba,unsigned int new_lba,int len);
 int f2fs_start_gc_thread(struct f2fs_sb_info *sbi);
 void f2fs_stop_gc_thread(struct f2fs_sb_info *sbi);
 block_t f2fs_start_bidx_of_node(unsigned int node_ofs, struct inode *inode);
