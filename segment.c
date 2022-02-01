@@ -1397,6 +1397,18 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 		if (unlikely(dcc->rbtree_check))
 			f2fs_bug_on(sbi, !f2fs_check_rb_tree_consistence(sbi,
 								&dcc->root));
+        	 int k = 100;
+                 int up = i * sbi->total_valid_block_count / sbi->user_block_count;
+                 long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
+                 long long int ssd_invalid = remapSendor(0,0);
+                 int down = ssd_invalid * dele;
+                 printk("up:%d\n",up);
+                 printk("dele:%ld\n",dele);
+                 printk("ssd_invalid:%ld\n",ssd_invalid);
+
+                 if(up < down)
+			break;
+		
 		blk_start_plug(&plug);
 		list_for_each_entry_safe(dc, tmp, pend_list, list) {
 			f2fs_bug_on(sbi, dc->state != D_PREP);
@@ -1627,7 +1639,7 @@ static int issue_discard_thread(void *data)
 			continue;
 		}
 
-		if (sbi->gc_mode == GC_URGENT)
+	//	if (sbi->gc_mode == GC_URGENT)
 			__init_discard_policy(sbi, &dpolicy, DPOLICY_FORCE, 1);
 
 		sb_start_intwrite(sbi->sb);
