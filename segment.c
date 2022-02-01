@@ -1385,8 +1385,8 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 	for (i = MAX_PLIST_NUM - 1; i >= 0; i--) {
 		if (i + 1 < dpolicy->granularity)
 			break;
-		if(i<32)
-			break;
+		// if(i<32)
+		// 	break;
 
 		if (i < DEFAULT_DISCARD_GRANULARITY && dpolicy->ordered)
 			return __issue_discard_cmd_orderly(sbi, dpolicy);
