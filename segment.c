@@ -26,6 +26,123 @@
 #include "trace.h"
 #include <trace/events/f2fs.h>
 
+struct nvme_passthru_cmd {
+        __u8    opcode;
+        __u8    flags;
+        __u16   rsvd1;
+        __u32   nsid;
+        __u32   cdw2;
+        __u32   cdw3;
+        __u64   metadata;
+        __u64   addr;
+        __u32   metadata_len;
+        __u32   data_len;
+        __u32   cdw10;
+        __u32   cdw11;
+        __u32   cdw12;
+        __u32   cdw13;
+        __u32   cdw14;
+        __u32   cdw15;
+        __u32   timeout_ms;
+        __u32   result;
+};
+extern int nvme_kernel_iocmd(struct block_device *dev, struct nvme_passthru_cmd *ucmd);
+#define REMAP 0x93
+int remapSSD(unsigned int ori_lba,unsigned int new_lba,int len) {
+
+	struct file *filp = NULL;
+	mm_segment_t oldfs;
+	int err = 0;
+	struct block_device *b_dev;
+	u32 result;
+	int err2;
+	struct nvme_passthru_cmd cmd;
+	int ret;
+
+    oldfs = get_fs();
+    set_fs(get_ds());
+    filp = filp_open("/dev/nvme0n1", O_RDONLY, 0);
+    set_fs(oldfs);
+    if (IS_ERR(filp)) {
+        err = PTR_ERR(filp);
+                printk("Unable to open stats file to write\n");
+        return -1;
+    }
+
+	cmd.opcode = REMAP;
+	cmd.nsid = 1;
+	cmd.cdw10 = ori_lba;
+	cmd.cdw11 = new_lba;
+	cmd.cdw12 = len;
+	cmd.flags = 0;
+
+	b_dev = filp->f_inode->i_bdev;
+	err2 = nvme_kernel_iocmd(b_dev,&cmd);
+
+	filp_close(filp, NULL);
+	result = cmd.result;
+	printk("ori_lba:%d\n",ori_lba);
+	printk("new_lba:%d\n",new_lba);
+	printk("err2:%d\n",err2);
+	printk("result:%d\n",result);
+	ret = min(result & 0xffff,result >> 16) + 1;
+	if(ret>=0){
+			printk("remap success!\n");     
+			return 0;
+	} else {
+			printk("remap failed!\n"); 
+			return -1;
+	}
+}
+#define START 0
+#define END 1
+#define SEND 0
+
+int remapSendor(int is_start, int gc_type) {
+
+	struct file *filp = NULL;
+	mm_segment_t oldfs;
+	int err = 0;
+	struct block_device *b_dev;
+	u32 result;
+	int err2;
+	struct nvme_passthru_cmd cmd;
+	int ret;
+
+    oldfs = get_fs();
+    set_fs(get_ds());
+    filp = filp_open("/dev/nvme0n1", O_RDONLY, 0);
+    set_fs(oldfs);
+    if (IS_ERR(filp)) {
+        err = PTR_ERR(filp);
+                printk("Unable to open stats file to write\n");
+        return -1;
+    }
+
+	cmd.opcode = REMAP;
+	cmd.nsid = 1;
+	cmd.cdw10 = gc_type;
+	cmd.cdw11 = is_start;
+	cmd.cdw12 = SEND; // cdw12 < 0 means: send message.
+	cmd.flags = 0;
+
+	b_dev = filp->f_inode->i_bdev;
+	err2 = nvme_kernel_iocmd(b_dev,&cmd);
+
+	filp_close(filp, NULL);
+	result = cmd.result;
+//      printk("err2:%d\n",err2);
+//      printk("result:%d\n",result);
+	ret = min(result & 0xffff,result >> 16) + 1;
+	if(ret>=0){
+//              printk("SEND success!\n");      
+			return result;
+	} else {
+//              printk("SEND failed!\n"); 
+			return -1;
+	}
+}
+
 #define __reverse_ffz(x) __reverse_ffs(~(x))
 
 static struct kmem_cache *discard_entry_slab;
@@ -1403,15 +1520,15 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 			解决问题的思路：
 				积累的写造成的数据搬移到达一定程度，就将阻塞的block释放掉。
 		*/
-		// long long int immigration = 0;
-		// long long int ssd_invalid = remapSendor(0,0);
+		long long int immigration = 0;
+		long long int ssd_invalid = remapSendor(0,0);
 
-		// int up = i * sbi->total_valid_block_count / sbi->user_block_count;
-		// long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
-		// int down = ssd_invalid * dele;
-		// printk("up:%d\n",up);
-		// printk("dele:%ld\n",dele);
-		// printk("ssd_invalid:%ld\n",ssd_invalid);
+		int up = i * sbi->total_valid_block_count / sbi->user_block_count;
+		long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
+		int down = ssd_invalid * dele;
+		printk("up:%d\n",up);
+		printk("dele:%ld\n",dele);
+		printk("ssd_invalid:%ld\n",ssd_invalid);
 
 		// if(up < down)
 		// 	break;
@@ -1439,8 +1556,9 @@ next:
 			break;
 	}
 
-	if (!issued && (!io_interrupted))
+	if (atomic_read(&dcc->discard_cmd_cnt) == 0)
 		sbi->write_for_trim = 0;
+	if ()
 	if (!issued && io_interrupted)
 		issued = -1;
 
