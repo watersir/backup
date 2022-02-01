@@ -1397,18 +1397,24 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 		if (unlikely(dcc->rbtree_check))
 			f2fs_bug_on(sbi, !f2fs_check_rb_tree_consistence(sbi,
 								&dcc->root));
-        	 int k = 100;
-                 int up = i * sbi->total_valid_block_count / sbi->user_block_count;
-                 long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
-                 long long int ssd_invalid = remapSendor(0,0);
-                 int down = ssd_invalid * dele;
-                 printk("up:%d\n",up);
-                 printk("dele:%ld\n",dele);
-                 printk("ssd_invalid:%ld\n",ssd_invalid);
+		/*
+			解决问题的思路：
+				积累的写造成的数据搬移到达一定程度，就将阻塞的block释放掉。
+		*/
+		// long long int immigration = 0;
+		// long long int ssd_invalid = remapSendor(0,0);
 
-                 if(up < down)
+		// int up = i * sbi->total_valid_block_count / sbi->user_block_count;
+		// long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
+		// int down = ssd_invalid * dele;
+		// printk("up:%d\n",up);
+		// printk("dele:%ld\n",dele);
+		// printk("ssd_invalid:%ld\n",ssd_invalid);
+
+		// if(up < down)
+		// 	break;
+		if(i<32)
 			break;
-		
 		blk_start_plug(&plug);
 		list_for_each_entry_safe(dc, tmp, pend_list, list) {
 			f2fs_bug_on(sbi, dc->state != D_PREP);
@@ -1418,8 +1424,8 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 				io_interrupted = true;
 				break;
 			}
-
-			__submit_discard_cmd(sbi, dpolicy, dc, &issued);
+			if(sbi->write_for_trim)
+				__submit_discard_cmd(sbi, dpolicy, dc, &issued);
 
 			if (issued >= dpolicy->max_requests)
 				break;
