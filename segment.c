@@ -3176,75 +3176,75 @@ reallocate:
 		up_read(&fio->sbi->io_order_lock);
 }
 
-struct nvme_passthru_cmd {
-	__u8	opcode;
-	__u8	flags;
-	__u16	rsvd1;
-	__u32	nsid;
-	__u32	cdw2;
-	__u32	cdw3;
-	__u64	metadata;
-	__u64	addr;
-	__u32	metadata_len;
-	__u32	data_len;
-	__u32	cdw10;
-	__u32	cdw11;
-	__u32	cdw12;
-	__u32	cdw13;
-	__u32	cdw14;
-	__u32	cdw15;
-	__u32	timeout_ms;
-	__u32	result;
-};
-extern int nvme_kernel_iocmd(struct block_device *dev, struct nvme_passthru_cmd *ucmd);
-#define REMAP 0x93
-int remapSSD(unsigned int ori_lba,unsigned int new_lba,int len) {
+// struct nvme_passthru_cmd {
+// 	__u8	opcode;
+// 	__u8	flags;
+// 	__u16	rsvd1;
+// 	__u32	nsid;
+// 	__u32	cdw2;
+// 	__u32	cdw3;
+// 	__u64	metadata;
+// 	__u64	addr;
+// 	__u32	metadata_len;
+// 	__u32	data_len;
+// 	__u32	cdw10;
+// 	__u32	cdw11;
+// 	__u32	cdw12;
+// 	__u32	cdw13;
+// 	__u32	cdw14;
+// 	__u32	cdw15;
+// 	__u32	timeout_ms;
+// 	__u32	result;
+// };
+// extern int nvme_kernel_iocmd(struct block_device *dev, struct nvme_passthru_cmd *ucmd);
+// #define REMAP 0x93
+// int remapSSD(unsigned int ori_lba,unsigned int new_lba,int len) {
 	
-	struct file *filp = NULL;
-    mm_segment_t oldfs;
-    int err = 0;
+// 	struct file *filp = NULL;
+//     mm_segment_t oldfs;
+//     int err = 0;
 
-    oldfs = get_fs();
-    set_fs(get_ds());
-    filp = filp_open("/dev/nvme0n1", O_RDONLY, 0);
-    set_fs(oldfs);
-    if (IS_ERR(filp)) {
-        err = PTR_ERR(filp);
-		printk("Unable to open stats file to write\n");
-        return -1;
-    }
+//     oldfs = get_fs();
+//     set_fs(get_ds());
+//     filp = filp_open("/dev/nvme0n1", O_RDONLY, 0);
+//     set_fs(oldfs);
+//     if (IS_ERR(filp)) {
+//         err = PTR_ERR(filp);
+// 		printk("Unable to open stats file to write\n");
+//         return -1;
+//     }
 
-	struct block_device *b_dev;
-	u32 result;
-	int err2;
-	struct nvme_passthru_cmd cmd;
-	int ret;
+// 	struct block_device *b_dev;
+// 	u32 result;
+// 	int err2;
+// 	struct nvme_passthru_cmd cmd;
+// 	int ret;
 
-	cmd.opcode = REMAP;
-	cmd.nsid = 1;
-	cmd.cdw10 = ori_lba;
-	cmd.cdw11 = new_lba;
-	cmd.cdw12 = len;
-	cmd.flags = 0;
+// 	cmd.opcode = REMAP;
+// 	cmd.nsid = 1;
+// 	cmd.cdw10 = ori_lba;
+// 	cmd.cdw11 = new_lba;
+// 	cmd.cdw12 = len;
+// 	cmd.flags = 0;
 
-	b_dev = filp->f_inode->i_bdev;
-	err2 = nvme_kernel_iocmd(b_dev,&cmd);
+// 	b_dev = filp->f_inode->i_bdev;
+// 	err2 = nvme_kernel_iocmd(b_dev,&cmd);
 
-	filp_close(filp, NULL);
-	result = cmd.result;
-	printk("ori_lba:%d\n",ori_lba);
-	printk("new_lba:%d\n",new_lba);
-	printk("err2:%d\n",err2);
-	printk("result:%d\n",result);
-	ret = min(result & 0xffff,result >> 16) + 1;
-	if(ret>=0){
-		printk("remap success!\n");	
-		return 0;
-	} else {
-		printk("remap failed!\n"); 
-		return -1;
-	}
-}
+// 	filp_close(filp, NULL);
+// 	result = cmd.result;
+// 	printk("ori_lba:%d\n",ori_lba);
+// 	printk("new_lba:%d\n",new_lba);
+// 	printk("err2:%d\n",err2);
+// 	printk("result:%d\n",result);
+// 	ret = min(result & 0xffff,result >> 16) + 1;
+// 	if(ret>=0){
+// 		printk("remap success!\n");	
+// 		return 0;
+// 	} else {
+// 		printk("remap failed!\n"); 
+// 		return -1;
+// 	}
+// }
 static void do_remap_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 {
 	int type = __get_segment_type(fio);
