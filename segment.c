@@ -1520,9 +1520,7 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 			解决问题的思路：
 				积累的写造成的数据搬移到达一定程度，就将阻塞的block释放掉。
 		*/
-		// long long int immigration = 0;
-		// long long int ssd_invalid = remapSendor(0,0);
-
+		//long long int immigration = 0;
 		// int up = i * sbi->total_valid_block_count / sbi->user_block_count;
 		// long long int dele = atomic_read(&sbi->nr_pages[F2FS_WB_DATA])+atomic_read(&sbi->nr_pages[F2FS_WB_CP_DATA]);
 		// int down = ssd_invalid * dele;
@@ -1539,8 +1537,13 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 
 			if (dpolicy->io_aware && i < dpolicy->io_aware_gran &&
 								!is_idle(sbi)) {
-				io_interrupted = true;
-				break;
+				long long int ssd_invalid = remapSendor(0,0);
+				long long int ssd_total = 4718592;
+				int k = 32;
+				if(i * total < k * ssd_invalid){
+					io_interrupted = true;
+					break;
+				}
 			}
 			
 			__submit_discard_cmd(sbi, dpolicy, dc, &issued);
