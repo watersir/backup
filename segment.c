@@ -1106,7 +1106,7 @@ static void __init_discard_policy(struct f2fs_sb_info *sbi,
 	dpolicy->ordered = false;
 	dpolicy->granularity = granularity;
 
-	dpolicy->max_requests = DEF_MAX_DISCARD_REQUEST;//80000000;//DEF_MAX_DISCARD_REQUEST;
+	dpolicy->max_requests = 80;//DEF_MAX_DISCARD_REQUEST;//80000000;
 	dpolicy->io_aware_gran = MAX_PLIST_NUM;
 
 	if (discard_type == DPOLICY_BG) {
@@ -1537,13 +1537,13 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 
 			if (dpolicy->io_aware && i < dpolicy->io_aware_gran &&
 								!is_idle(sbi)) {
-				long long int ssd_invalid = remapSendor(0,0);
-				long long int ssd_total = 4718592;
-				int k = 32;
-				if(i * total < k * ssd_invalid){
+				// long long int ssd_invalid = remapSendor(0,0);
+				// long long int ssd_total = 4718592;
+				// int k = 32;
+				// if(i * total < k * ssd_invalid){
 					io_interrupted = true;
 					break;
-				}
+				// }
 			}
 			
 			__submit_discard_cmd(sbi, dpolicy, dc, &issued);
@@ -1767,7 +1767,7 @@ static int issue_discard_thread(void *data)
 			continue;
 		}
 
-		if (sbi->gc_mode == GC_URGENT)
+	//	if (sbi->gc_mode == GC_URGENT)
 			__init_discard_policy(sbi, &dpolicy, DPOLICY_FORCE, 1);
 
 		sb_start_intwrite(sbi->sb);
