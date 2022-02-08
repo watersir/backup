@@ -1106,7 +1106,7 @@ static void __init_discard_policy(struct f2fs_sb_info *sbi,
 	dpolicy->ordered = false;
 	dpolicy->granularity = granularity;
 
-	dpolicy->max_requests = 80;//DEF_MAX_DISCARD_REQUEST;//80000000;
+	dpolicy->max_requests = 8;//DEF_MAX_DISCARD_REQUEST;//80000000;
 	dpolicy->io_aware_gran = MAX_PLIST_NUM;
 
 	if (discard_type == DPOLICY_BG) {
@@ -1535,17 +1535,17 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 
 			if (dpolicy->io_aware && i < dpolicy->io_aware_gran &&
 								!is_idle(sbi)) {
-				long long int ssd_invalid = remapSendor(0,0);
-				long long int ssd_total = 4718592;
-				int k = 140;
+//				long long int ssd_invalid = remapSendor(0,0);
+//				long long int ssd_total = 4718592;
+//				int k = 140;
 				// if(i < 128) { // i means the block size, not sector size.
 				// 	io_interrupted = true;
 				// 	break;
 				// }
-				if(i * ssd_total < k * (ssd_total - ssd_invalid)){
+//				if(i * ssd_total < k * (ssd_total - ssd_invalid)){
 					io_interrupted = true;
 					break;
-				}
+//				}
 			}
 			
 			__submit_discard_cmd(sbi, dpolicy, dc, &issued);
