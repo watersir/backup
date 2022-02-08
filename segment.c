@@ -1535,17 +1535,17 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 
 			if (dpolicy->io_aware && i < dpolicy->io_aware_gran &&
 								!is_idle(sbi)) {
-				// long long int ssd_invalid = remapSendor(0,0);
-				// long long int ssd_total = 4718592;
-				// int k = 32;
-				if(i < 128) { // i means the block size, not sector size.
+				long long int ssd_invalid = remapSendor(0,0);
+				long long int ssd_total = 4718592;
+				int k = 70;
+				// if(i < 128) { // i means the block size, not sector size.
+				// 	io_interrupted = true;
+				// 	break;
+				// }
+				if(i * total < k * (ssd_total - ssd_invalid)){
 					io_interrupted = true;
 					break;
 				}
-				// if(i * total < k * ssd_invalid){
-					// io_interrupted = true;
-					// break;
-				// }
 			}
 			
 			__submit_discard_cmd(sbi, dpolicy, dc, &issued);
