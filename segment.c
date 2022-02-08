@@ -1542,7 +1542,7 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 				// 	io_interrupted = true;
 				// 	break;
 				// }
-				if(i * total < k * (ssd_total - ssd_invalid)){
+				if(i * ssd_total < k * (ssd_total - ssd_invalid)){
 					io_interrupted = true;
 					break;
 				}
