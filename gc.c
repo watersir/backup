@@ -1328,10 +1328,10 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 		if (type == SUM_TYPE_NODE)
 			gc_node_segment(sbi, sum->entries, segno, gc_type);
 		else{
-			if(gc_type==BG_GC)
+//			if(gc_type==BG_GC)
 				gc_data_segment(sbi, sum->entries, gc_list, segno,gc_type);
-			else	
-				gc_data_segment_FG(sbi, sum->entries, gc_list, segno,gc_type);
+//			else	
+//				gc_data_segment_FG(sbi, sum->entries, gc_list, segno,gc_type);
 		}
 			
 
