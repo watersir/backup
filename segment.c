@@ -1537,7 +1537,7 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 								!is_idle(sbi)) {
 				long long int ssd_invalid = remapSendor(0,0);
 				long long int ssd_total = 4718592;
-				int k = 140;
+				int k = 140*2;
 				// if(i < 128) { // i means the block size, not sector size.
 				// 	io_interrupted = true;
 				// 	break;
