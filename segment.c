@@ -1,3 +1,4 @@
+
 /*
  * fs/f2fs/segment.c
  *
@@ -1106,7 +1107,7 @@ static void __init_discard_policy(struct f2fs_sb_info *sbi,
 	dpolicy->ordered = false;
 	dpolicy->granularity = granularity;
 
-	dpolicy->max_requests = 8;//DEF_MAX_DISCARD_REQUEST;//80000000;
+	dpolicy->max_requests = 200;//80000000;//20;//DEF_MAX_DISCARD_REQUEST;//80000000;
 	dpolicy->io_aware_gran = MAX_PLIST_NUM;
 
 	if (discard_type == DPOLICY_BG) {
@@ -1499,9 +1500,21 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 // 	printk("4:%d\n",atomic_read(&dcc->issing_discard));
  	printk("5:%d\n",atomic_read(&dcc->discard_cmd_cnt));
 
+
+	int times = 0;
+	int totaltimes = 0;
+	long long int blocks = 0;
+	long long int ssd_invalid = remapSendor(0,0);
+	long long int ssd_total = 4718592;
+	long long int outUpdate = remapSendor(100,0);
+	printk("ou:%d\n",outUpdate);
+	printk("invalid:%d\n",ssd_invalid);
+	int threshold = 1;
+//	if(outUpdate*10 < sbi->write_for_trim)
+//		threshold = 1;
 	for (i = MAX_PLIST_NUM - 1; i >= 0; i--) {
-		if (i + 1 < dpolicy->granularity)
-			break;
+	//	if (i + 1 < dpolicy->granularity)
+	//		break;
 
 		if (i < DEFAULT_DISCARD_GRANULARITY && dpolicy->ordered)
 			return __issue_discard_cmd_orderly(sbi, dpolicy);
@@ -1535,19 +1548,54 @@ static int __issue_discard_cmd(struct f2fs_sb_info *sbi,
 
 			if (dpolicy->io_aware && i < dpolicy->io_aware_gran &&
 								!is_idle(sbi)) {
-				long long int ssd_invalid = remapSendor(0,0);
-				long long int ssd_total = 4718592;
-				int k = 140*2;
+			//	long long int ssd_invalid = remapSendor(0,0);
+			//	long long int ssd_total = 4718592;
+			//	int k = 81;
 				// if(i < 128) { // i means the block size, not sector size.
 				// 	io_interrupted = true;
 				// 	break;
 				// }
-				if(i * ssd_total < k * (ssd_total - ssd_invalid)){
-					io_interrupted = true;
-					break;
+//				if((ssd_total-ssd_invalid)*100<ssd_total*84){
+			//		io_interrupted = true;
+			//		break;
+//				}
+				blocks += dc->len;
+				times += 1;
+				totaltimes += 1;
+				if(times >= threshold) {
+				//	printk("blocks:%d",blocks);
+					long long int new = ssd_total - ssd_invalid - blocks;
+					long long int old = ssd_total - ssd_invalid;
+		         		//int wt = outUpdate; //
+					int wt = sbi->write_for_trim;
+				//	unsigned long long int tmp_old = 117*old*old-7*old*ssd_total;
+				//	unsigned long long int wa_old_up = (tmp_old>>30)*wt*24;
+				//	unsigned long long int wa_old_down = ((ssd_total*ssd_total*100)>>30)-(tmp_old>>30);
+				//	unsigned long long int wa_old = wa_old_up/wa_old_down;	
+
+					unsigned long long int tmp_new = 117*new*new-7*new*ssd_total;
+					unsigned long long int wa_new_up = (tmp_new>>30)*wt*24;
+					unsigned long long int wa_new_down = ((ssd_total*ssd_total*100)>>30)-(tmp_new>>30);
+					unsigned long long int wa_new = wa_new_up/wa_new_down;
+
+					long long int gain = wa_new * 10;
+				//	long long int gain_old = (20*old*24*wt)/(20*ssd_total-19*old);
+				//	long long int gain_new = (20*new*24*wt)/(20*ssd_total-19*new);
+				//	printk("gain_old:%lld\n",wa_old);
+					printk("gain_new:%lld\n",wa_new);
+				//	long long int gain = gain_old-gain_new;
+					long long int cost = totaltimes*10;
+				//	printk("gain:%lld\n",gain);
+				//	printk("cost:%lld\n",cost);
+					if(gain < cost) {
+						io_interrupted = true;
+						break;
+					} else 
+						times = 0;
 				}
 			}
-			
+	//		long long int ssd_invalid = remapSendor(0,0);
+	//		printk("4:%d",ssd_invalid);
 			__submit_discard_cmd(sbi, dpolicy, dc, &issued);
 
 			if (issued >= dpolicy->max_requests)
@@ -1559,11 +1607,11 @@ next:
 
 		if (issued >= dpolicy->max_requests || io_interrupted)
 			break;
+		if(times >= 10)
+			break;
 	}
 
-	if (atomic_read(&dcc->discard_cmd_cnt) == 0)
-		sbi->write_for_trim = 0;
-//	if ()
+	sbi->write_for_trim = 0;
 	if (!issued && io_interrupted)
 		issued = -1;
 
